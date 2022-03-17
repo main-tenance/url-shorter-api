@@ -3,29 +3,13 @@
 namespace App\Services\Links\Handlers;
 
 use App\Models\Link;
-use App\Services\Links\Exceptions\LinksUrlException;
-use App\Services\Links\Repositories\LinksRepository;
 
 class LinksUpdateHandler
 {
-    private LinksRepository $linksRepository;
-
-    public function __construct(
-        LinksRepository $linksRepository
-    )
-    {
-        $this->linksRepository = $linksRepository;
-    }
-
     public function handle(Link $link, array $data): Link
     {
         if (!empty($data['long_url'])) {
-            try {
-                $content = file_get_contents($data['long_url']);
-                $link->long_url = $data['long_url'];
-            } catch (\Exception $exception) {
-                throw new LinksUrlException('Ссылка '. $data['long_url'] .' не доступна.');
-            }
+            $link->long_url = $data['long_url'];
         }
 
         if (!empty($data['title'])) {

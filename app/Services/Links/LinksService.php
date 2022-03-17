@@ -9,7 +9,7 @@ use App\Services\Links\Exceptions\LinksUrlException;
 use App\Services\Links\Handlers\LinksCreateHandler;
 use App\Services\Links\Handlers\LinksUpdateHandler;
 use App\Services\Links\Repositories\LinksRepository;
-use Illuminate\Http\RedirectResponse;
+use ErrorException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Validation\ValidationException;
@@ -24,7 +24,7 @@ class LinksService
     public function __construct(
         LinksCreateHandler $linksCreateHandler,
         LinksUpdateHandler $linksUpdateHandler,
-        LinksRepository $linksRepository
+        LinksRepository    $linksRepository
     )
     {
         $this->linksCreateHandler = $linksCreateHandler;
@@ -47,7 +47,8 @@ class LinksService
             ]);
 
             try {
-                $link = $this->linksCreateHandler->handle($data);
+                $content = $this->getContent($data['long_url']);
+                $link = $this->createOneLink($data, $content);
             } catch (LinksUrlException $exception) {
                 throw ValidationException::withMessages([$exception->getMessage()]);
             }
@@ -64,7 +65,8 @@ class LinksService
         $links = [];
         foreach ($data as $itemData) {
             try {
-                $links[] = $this->linksCreateHandler->handle($itemData);
+                $content = $this->getContent($itemData['long_url']);
+                $links[] = $this->createOneLink($itemData, $content);
             } catch (LinksUrlException $exception) {
                 $messages[] = $exception->getMessage();
             }
@@ -84,6 +86,14 @@ class LinksService
             'title' => 'sometimes|string|max:255',
             'tags' => 'sometimes|array',
         ]);
+        if (!empty($data['long_url'])) {
+            try {
+                $this->getContent($data['long_url']);
+            } catch (LinksUrlException $exception) {
+                throw ValidationException::withMessages([$exception->getMessage()]);
+            }
+        }
+
         $link = $this->linksUpdateHandler->handle($link, $data);
 
         return new LinkResource($link);
@@ -98,7 +108,7 @@ class LinksService
     {
         $link = $this->linksRepository->getByShortUrl($shortUrl);
         if ($link === null) {
-            throw new NotFoundHttpException('Ссылка '.$shortUrl.' не найдена.');
+            throw new NotFoundHttpException('Ссылка ' . $shortUrl . ' не найдена.');
         }
 
         return $this->linksRepository->saveView($link['id'], $request->header('user-agent'), $request->ip());
@@ -109,5 +119,33 @@ class LinksService
         $link = $this->linksRepository->getByTag($tag);
 
         return $link;
+    }
+
+    private function getContent(string $longUrl): string
+    {
+        try {
+            $content = file_get_contents($longUrl);
+        } catch (ErrorException $e) {
+            throw new LinksUrlException('Ссылка ' . $longUrl . ' не доступна.');
+        }
+
+        return $content;
+    }
+
+    private function getTitle(string $content): string
+    {
+        $matches = [];
+        preg_match('~<title>(.*)</title>~is', $content, $matches);
+
+        return $matches[1];
+    }
+
+    private function createOneLink(array $data, string $content): Link
+    {
+        if (empty($data['title'])) {
+            $data['title'] = $this->getTitle($content);
+        }
+
+        return $this->linksCreateHandler->handle($data);
     }
 }
