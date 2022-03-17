@@ -84,7 +84,7 @@ class LinkController extends Controller
     {
         $view = $this->service->saveView($shortUrl, $request);
 
-        return redirect()->away($view->link()->long_url);
+        return redirect()->away($view->link->long_url);
     }
 
     public function title(Link $link): JsonResource
